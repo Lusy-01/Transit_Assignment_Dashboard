@@ -1,24 +1,42 @@
+###### \# Chennai MTC Transit Dashboard
+
+###### 
+
+###### !\[Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge\&logo=python\&logoColor=white)
+
+###### !\[FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge\&logo=fastapi\&logoColor=white)
+
+###### !\[JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge\&logo=javascript\&logoColor=black)
+
+###### !\[HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge\&logo=html5\&logoColor=white)
+
+###### 
+
+###### An interactive transit data dashboard for analyzing MTC bus network performance and ridership patterns in Chennai.
+
+
+
 # Transit Assignment Dashboard
 
-A FastAPI backend + MapLibre/Plotly frontend built directly on your `05\_results/` static macro
+A FastAPI backend + MapLibre/Plotly frontend built directly on your `05\\\\\\\_results/` static macro
 transit-assignment outputs (real data included under `data/`, not sample/mock data).
 
 ```
-transit\_dashboard/
+transit\\\\\\\_dashboard/
 ├── backend/
 │   ├── main.py            FastAPI app — endpoints for stops, links, routes, OD, KPIs
-│   ├── data\_prep.py        loads + derives every planning metric (documented assumptions)
+│   ├── data\\\\\\\_prep.py        loads + derives every planning metric (documented assumptions)
 │   └── requirements.txt
 ├── frontend/
 │   └── index.html          MapLibre GL JS + Plotly dashboard, no build step
 ├── data/                   your real extracted results, wired in and ready to serve
-│   ├── mtc\_stops.geojson, mtc\_loaded\_links.geojson
-│   ├── all\_days\_route\_loads\_summed.csv, day\_type\_summary.csv, zone\_centroids.csv
-│   ├── od\_long\_combined.csv
-│   └── daily/               31 days of per-day loaded\_links + route\_loads (for day-type filtering)
+│   ├── mtc\\\\\\\_stops.geojson, mtc\\\\\\\_loaded\\\\\\\_links.geojson
+│   ├── all\\\\\\\_days\\\\\\\_route\\\\\\\_loads\\\\\\\_summed.csv, day\\\\\\\_type\\\\\\\_summary.csv, zone\\\\\\\_centroids.csv
+│   ├── od\\\\\\\_long\\\\\\\_combined.csv
+│   └── daily/               31 days of per-day loaded\\\\\\\_links + route\\\\\\\_loads (for day-type filtering)
 └── docs/
     ├── ARCHITECTURE.md      data flow, layer→endpoint mapping, filter caveats
-    └── DATA\_SCHEMA.md       field-by-field: source vs. derived, and what's missing for full parity
+    └── DATA\\\\\\\_SCHEMA.md       field-by-field: source vs. derived, and what's missing for full parity
 ```
 
 ## Quick start
@@ -39,12 +57,12 @@ route/direction, plus route- and zone-level summaries. It does **not** contain p
 boarding/alighting counts, vehicle capacities, true alignment lengths/speeds, time-of-day splits,
 or the assignment's convergence log. Rather than fabricate those, the backend:
 
-* **derives** boardings/alightings via the standard delta-load method (clearly labeled `\_est` in
+* **derives** boardings/alightings via the standard delta-load method (clearly labeled `\\\\\\\_est` in
 every API response),
 * **flags assumptions** it had to make (vehicle capacity, commercial speed) as adjustable constants
-in `data\_prep.py`, and
+in `data\\\\\\\_prep.py`, and
 * **returns HTTP 501** on the one thing it can't approximate honestly (assignment convergence),
 rather than plotting a fake curve.
 
-Full detail, endpoint-by-endpoint, in `docs/DATA\_SCHEMA.md`.
+Full detail, endpoint-by-endpoint, in `docs/DATA\\\\\\\_SCHEMA.md`.
 
