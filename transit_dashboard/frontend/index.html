@@ -38,9 +38,6 @@
   #legend{position:absolute;bottom:16px;left:16px;background:rgba(20,26,34,.92);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11px;color:var(--dim);z-index:5;}
   .legend-swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;}
   #statusbar{position:absolute;top:12px;right:12px;background:rgba(20,26,34,.9);border:1px solid var(--line);padding:6px 10px;border-radius:6px;font-size:11px;color:var(--dim);z-index:5;}
-  .route-row{font-size:12px;padding:5px 6px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;}
-  .route-row:hover{background:var(--panel2);}
-  .route-row .rv{font-family:var(--mono);color:var(--accent2);}
   #profileEmpty{font-size:12px;color:var(--dim);padding:10px 0;}
 </style>
 </head>
@@ -89,15 +86,42 @@
   </div>
 
   <div id="right">
-    <h2>Top routes (all-days ridership)</h2>
-    <div id="topRoutes"></div>
+    <h2>All routes (<span id="routeCount">0</span>)</h2>
+    <input type="text" id="routeFilter" placeholder="Filter by name…" style="margin-bottom:8px;" />
+    <div id="routesTableWrap" style="max-height:280px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;">
+      <table id="routesTable" style="width:100%;border-collapse:collapse;font-size:11.5px;">
+        <thead style="position:sticky;top:0;background:var(--panel2);">
+          <tr>
+            <th data-key="route_short_name" class="sortable sort-active" data-dir="desc">Route</th>
+            <th data-key="max_link_volume" class="sortable">Max</th>
+            <th data-key="avg_link_volume" class="sortable">Avg</th>
+            <th data-key="n_loaded_links" class="sortable">Links</th>
+            <th data-key="total_pax_km_links" class="sortable">Pax-km</th>
+          </tr>
+        </thead>
+        <tbody id="routesTableBody"></tbody>
+      </table>
+    </div>
     <h2>Selected route — load profile</h2>
-    <div id="profileEmpty">Click a corridor on the map, or a route above, to see its stop-by-stop load profile and Max Load Point.</div>
+    <div id="profileEmpty">Click a corridor on the map, or a row above, to see its stop-by-stop load profile and Max Load Point.</div>
     <div id="profileChart" style="width:100%;height:220px;"></div>
     <h2>Selected stop</h2>
     <div id="stopDetail" style="font-size:12px;color:var(--dim);">Click a stop marker for boarding/alighting detail.</div>
   </div>
 </div>
+
+<style>
+  #routeFilter{width:100%;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12.5px;}
+  #routesTable th, #routesTable td{padding:5px 7px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;}
+  #routesTable th:first-child, #routesTable td:first-child{text-align:left;}
+  #routesTable th.sortable{cursor:pointer;color:var(--dim);user-select:none;}
+  #routesTable th.sortable:hover{color:var(--ink);}
+  #routesTable th.sortable.sort-active{color:var(--accent2);}
+  #routesTable th.sortable[data-dir="asc"].sort-active::after{content:" ▲";}
+  #routesTable th.sortable[data-dir="desc"].sort-active::after{content:" ▼";}
+  #routesTable tbody tr{cursor:pointer;}
+  #routesTable tbody tr:hover{background:var(--panel2);}
+</style>
 
 <script>
 const API_BASE = "http://localhost:8000"; // point this at your running `uvicorn main:app` instance
@@ -155,18 +179,63 @@ async function loadKPIs(dayType){
     <div class="kpi"><div class="v">${(k.through_volume_proxy/1e6).toFixed(1)}M</div><div class="l">Through-vol. proxy*</div></div>`;
 }
 
+let allRoutesData = [];
+let routeSort = {key:'max_link_volume', dir:'desc'};
+
+function renderRoutesTable(){
+  const q = (document.getElementById('routeFilter').value||'').trim().toLowerCase();
+  const {key, dir} = routeSort;
+  const filtered = allRoutesData.filter(x => !q || String(x.route_short_name||x.route_id).toLowerCase().includes(q));
+  filtered.sort((a,b)=>{
+    let av=a[key], bv=b[key];
+    if (typeof av === 'string' || typeof bv === 'string'){
+      av = String(av||''); bv = String(bv||'');
+      return dir==='asc' ? av.localeCompare(bv, undefined, {numeric:true}) : bv.localeCompare(av, undefined, {numeric:true});
+    }
+    av = av||0; bv = bv||0;
+    return dir==='asc' ? av-bv : bv-av;
+  });
+  document.getElementById('routeCount').textContent = `${filtered.length}${q ? ' of '+allRoutesData.length : ''}`;
+  document.getElementById('routesTableBody').innerHTML = filtered.map(x => `
+    <tr data-route="${x.route_id}">
+      <td>${x.route_short_name||x.route_id}</td>
+      <td>${Math.round(x.max_link_volume).toLocaleString()}</td>
+      <td>${Math.round(x.avg_link_volume).toLocaleString()}</td>
+      <td>${x.n_loaded_links}</td>
+      <td>${Math.round(x.total_pax_km_links).toLocaleString()}</td>
+    </tr>`).join('');
+  document.querySelectorAll('#routesTableBody tr').forEach(row=>row.addEventListener('click', ()=>{
+    document.getElementById('routeSelect').value = row.dataset.route;
+    refreshLayers(); showRouteProfile(row.dataset.route);
+  }));
+}
+
 async function loadTopRoutes(){
   const r = await api('/api/routes');
-  const rows = r.routes.sort((a,b)=>b.max_link_volume-a.max_link_volume).slice(0,15);
+  allRoutesData = r.routes;
+
+  // Dropdown gets every route in the dataset, sorted by name so it's scannable.
+  const sortedForDropdown = allRoutesData.slice().sort((a,b)=>
+    String(a.route_short_name||a.route_id).localeCompare(String(b.route_short_name||b.route_id), undefined, {numeric:true})
+  );
   const sel = document.getElementById('routeSelect');
-  sel.innerHTML = '<option value="">All routes</option>' + rows.map(x=>`<option value="${x.route_id}">${x.route_short_name||x.route_id}</option>`).join('');
-  document.getElementById('topRoutes').innerHTML = rows.map(x=>
-    `<div class="route-row" data-route="${x.route_id}"><span>${x.route_short_name||x.route_id}</span><span class="rv">${Math.round(x.max_link_volume).toLocaleString()}</span></div>`
-  ).join('');
-  document.querySelectorAll('.route-row').forEach(el=>el.addEventListener('click', ()=>{
-    document.getElementById('routeSelect').value = el.dataset.route;
-    refreshLayers(); showRouteProfile(el.dataset.route);
-  }));
+  sel.innerHTML = '<option value="">All routes</option>' +
+    sortedForDropdown.map(x=>`<option value="${x.route_id}">${x.route_short_name||x.route_id}</option>`).join('');
+
+  // Table headers become clickable sort controls — click once for
+  // descending, again to flip to ascending (name column defaults asc).
+  document.querySelectorAll('#routesTable th.sortable').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const key = th.dataset.key;
+      if (routeSort.key === key) routeSort.dir = routeSort.dir === 'asc' ? 'desc' : 'asc';
+      else routeSort = {key, dir: key==='route_short_name' ? 'asc' : 'desc'};
+      document.querySelectorAll('#routesTable th.sortable').forEach(h=>{ h.classList.remove('sort-active'); h.removeAttribute('data-dir'); });
+      th.classList.add('sort-active'); th.setAttribute('data-dir', routeSort.dir);
+      renderRoutesTable();
+    });
+  });
+
+  renderRoutesTable();
 }
 
 async function showRouteProfile(routeId){
@@ -281,6 +350,7 @@ document.getElementById('dayType').addEventListener('change', async (e)=>{ await
 document.getElementById('routeSelect').addEventListener('change', ()=>{ refreshLayers(); const r=document.getElementById('routeSelect').value; if(r) showRouteProfile(r); });
 document.getElementById('minVol').addEventListener('input', (e)=>{ document.getElementById('minVolLabel').textContent = Number(e.target.value).toLocaleString(); });
 document.getElementById('minVol').addEventListener('change', refreshLayers);
+document.getElementById('routeFilter').addEventListener('input', renderRoutesTable);
 document.getElementById('toggleStops').addEventListener('change', refreshLayers);
 document.getElementById('toggleLinks').addEventListener('change', refreshLayers);
 document.getElementById('toggleZones').addEventListener('change', async (e)=>{
